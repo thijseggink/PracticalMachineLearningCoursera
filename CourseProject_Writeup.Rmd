@@ -1,0 +1,69 @@
+---
+title: "Coursera Practical Machine Learning Course Project (Writeup)"
+output: html_document
+---
+### Summary 
+This assignment is part of the practical machine learning course taught by the Johns Hopkins Bloomberg School of Public Health. Based on the dataset provided by **Groupware** the aim of this project is to predict the classe based on data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+### Writeup
+```{r, echo=FALSE, error= FALSE}
+library(RCurl)
+library(dplyr)
+library(stringr)
+library(caret)
+library(dplyr)
+library(randomForest)
+```
+
+The first step is to load the datasets into R, based on the URL provided.
+```{r}
+TrainURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+TestURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+Train <- read.csv(textConnection(getURL(TrainURL)))
+Test <- read.csv(textConnection(getURL(TestURL)))
+```
+
+Now we have the data, we can look at the data and do some exporatory data anaylses. I have chosen not to include this part in the markdown file, but in general I have used summary(), str() and dim() to look at the data and see what has to be cleaned up.
+
+Cleaning the data is done by filtering out the rows where the new_window column was set to no as that row is not necessary for our prediction model. Furthermore, the first seven columns are not needed for the model since these are purely descriptive, such as participant etc. 
+```{r}
+Train <- filter(Train, new_window == "no")
+CleaningTrain <- Train[,8:160]
+```
+
+Before we apply any further cleaning I partition the training dataset in a Test and Training set
+```{r}
+SplitTrain <- createDataPartition(y=CleaningTrain$classe,p=0.60, list=FALSE)
+
+SplitInTrain <- CleaningTrain[SplitTrain,]
+SplitInTest <- CleaningTrain[-SplitTrain,]
+```
+
+As we discovered in the initial exploratory analysis of the dataset, there were a lot of columns that only included NA values. Therefore we take out all of the columns where the number of NA values matches the number of rows, in other words. We take out all columns with only NA values. Next to that, we also exclude the columns with the name "amplitude", "skewness", "kurtosis", "min" and "max" as these are not a direct measurement, but a calculated field based on the observations.
+```{r}
+NumberofNAs = sapply(SplitInTrain, function(x) {sum(is.na(x))})
+
+CleanedSplitTrain <- SplitInTrain[ , !(names(SplitInTrain)) %in% names(NumberofNAs[NumberofNAs==nrow(SplitInTrain)])]
+
+subsetData <- CleanedSplitTrain[, grep("amplitude", colnames(CleanedSplitTrain))] 
+subsetData1 <- CleanedSplitTrain[, grep("min", colnames(CleanedSplitTrain))] 
+subsetData2 <- CleanedSplitTrain[, grep("max", colnames(CleanedSplitTrain))] 
+subsetData3 <- CleanedSplitTrain[, grep("skew", colnames(CleanedSplitTrain))] 
+subsetData4 <- CleanedSplitTrain[, grep("kurtos", colnames(CleanedSplitTrain))] 
+
+falsenames <- c(names(subsetData), names(subsetData1),names(subsetData2), names(subsetData3) ,names(subsetData4))
+
+FinalCleanedTrain <- CleanedSplitTrain[ , !(names(CleanedSplitTrain)) %in% falsenames]
+```
+
+Based on the cleaned training dataset we can now train or model. I have created the model and saved it on my local drive as it was very time consuming. Thats why I have 'excluded' the code to train the model, but just included the loading of the model into R.
+modFit <- train(as.factor(FinalCleanedTrain$classe)~.,data=FinalCleanedTrain,method="rf")
+```{r}
+load("PredictModel.rda")
+```
+
+The model has (obviously) been trained on the training dataset, so the next step is to run the model on the testing set to figure out how accurate the model actually is. 
+```{r}
+firstprediction <- predict(modFit, SplitInTest)
+mean(firstprediction == SplitInTest$classe)
+```
